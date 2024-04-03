@@ -8,9 +8,9 @@
 		"preview": "vite preview demo --host",
 		"start": "vite demo --host"
 	},
-	"repository": "kidonng/unocss-preset-daisy",
+	"repository": "monkeyDyang/unocss-preset-daisy",
 	"license": "MIT",
-	"author": "Kid <hi@xuann.wang> (https://xuann.wang/)",
+	"author": "monkeyDyang",
 	"type": "module",
 	"exports": "./index.js",
 	"files": [
