@@ -1,23 +1,22 @@
-import postcss, {type Rule, type ChildNode} from 'postcss'
+import postcss, { type Rule, type ChildNode } from 'postcss'
 import autoprefixer from 'autoprefixer'
-import {parse, type CssInJs} from 'postcss-js'
-import {tokenize, type ClassToken} from 'parsel-js'
-import type {Preset, DynamicRule, Preflight} from 'unocss'
+import { parse, type CssInJs } from 'postcss-js'
+import { tokenize, type ClassToken } from 'parsel-js'
+import type { Preset, DynamicRule, Preflight } from 'unocss'
 import camelCase from 'camelcase'
 import colors from 'daisyui/src/theming/index.js'
 import utilities from 'daisyui/dist/utilities.js'
 import base from 'daisyui/dist/base.js'
 import unstyled from 'daisyui/dist/unstyled.js'
-import unstyledRtl from 'daisyui/dist/unstyled.rtl.js'
 import styled from 'daisyui/dist/styled.js'
-import styledRtl from 'daisyui/dist/styled.rtl.js'
 import utilitiesUnstyled from 'daisyui/dist/utilities-unstyled.js'
 import utilitiesStyled from 'daisyui/dist/utilities-styled.js'
 import themes from 'daisyui/src/theming/themes.js'
 import colorFunctions from 'daisyui/src/theming/functions.js'
+import utilityClasses from 'daisyui/src/lib/utility-classes.js';
 
 const processor = postcss(autoprefixer)
-const process = (object: CssInJs) => processor.process(object, {parser: parse})
+const process = (object: CssInJs) => processor.process(object, { parser: parse })
 
 const replacePrefix = (css: string) => css.replaceAll('--tw-', '--un-')
 
@@ -32,6 +31,33 @@ const defaultOptions = {
 	darkTheme: 'dark',
 }
 
+/**
+ * Retrieves all non-atrule nodes from the provided node and its children.
+ * @param {ChildNode} node - The node to traverse.
+ * @returns {Rule[]} - An array containing non-atrule nodes.
+ */
+const notAtruleNode = (node: ChildNode): Rule[] => {
+	const collectedRules: Rule[] = []
+
+	/**
+	 * Recursively collects non-atrule nodes.
+	 * @param {ChildNode} currentNode - The current node to examine.
+	 */
+	const collectNonAtrules = (currentNode: ChildNode) => {
+		if (currentNode.type === 'atrule'&& currentNode.nodes) {
+			for (const child of currentNode.nodes) {
+				collectNonAtrules(child)
+			}
+		} else {
+			collectedRules.push(currentNode as Rule)
+		}
+	}
+
+	collectNonAtrules(node)
+
+	return collectedRules;
+}
+
 export const presetDaisy = (
 	options: Partial<typeof defaultOptions> = {},
 ): Preset => {
@@ -39,11 +65,10 @@ export const presetDaisy = (
 
 	const rules = new Map<string, string>()
 	const keyframes: string[] = []
+	const supports: string[] = []
 
 	const styles = [
-		options.styled
-			? (options.rtl ? styledRtl : styled)
-			: (options.rtl ? unstyledRtl : unstyled),
+		options.styled ? styled : unstyled
 	]
 	if (options.utils) {
 		styles.push(utilities, utilitiesUnstyled, utilitiesStyled)
@@ -57,8 +82,17 @@ export const presetDaisy = (
 			continue
 		}
 
+		if (isAtRule && node.name === 'supports') {
+			supports.push(String(node))
+			continue
+		}
+
+		if (isAtRule && node.name !== 'supports' && node.name === 'keyframes') {
+			continue
+		}
+
 		// Unwrap @media if necessary
-		const rule = (isAtRule ? node.nodes[0]! : node) as Rule
+		const rule = notAtruleNode(node)[0]!
 
 		const selector = rule.selectors[0]!
 		const tokens = tokenize(selector)
@@ -95,6 +129,10 @@ export const presetDaisy = (
 			getCSS: () => keyframes.join('\n'),
 			layer: 'daisy-keyframes',
 		},
+		{
+			getCSS: () => supports.join('\n'),
+			layer: 'daisy-supports',
+		}
 	]
 
 	if (options.base) {
@@ -124,7 +162,6 @@ export const presetDaisy = (
 			}
 		},
 		themes,
-		'hsl',
 	)
 
 	return {
@@ -149,6 +186,7 @@ export const presetDaisy = (
 						.filter(([color]) => color.startsWith('base'))
 						.map(([color, value]) => [color.replace('base-', ''), value]),
 				),
+				...utilityClasses
 			},
 		},
 		rules: [...rules].map(
